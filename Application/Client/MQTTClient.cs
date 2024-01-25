@@ -17,7 +17,6 @@ namespace RemoteMedia.Application.Client {
 
         private IManagedMqttClient _client;
         private CommandParser _parser;
-        private MqttConfig _config;
         private EventLog _logger;
         private SecurityUtility _security;
 
@@ -29,18 +28,16 @@ namespace RemoteMedia.Application.Client {
         }
 
         private async Task OnConnected(MqttClientConnectedEventArgs arg) {
-            await SubscribeTopic(_config);
+            await SubscribeTopic(ApplicationConfig.MqttListenTopic);
         }
 
         public async Task Start() {
             _logger.WriteEntry("Trying to start MQTT client");
-
-            _config = MqttConfig.LoadConfig();
-            var options = BuildClientOptions(_config);
+            var options = BuildClientOptions();
 
             _client.ApplicationMessageReceivedAsync += MessageReceived;
             _client.ConnectedAsync += OnConnected;
-            _security = new SecurityUtility(Encoding.UTF8.GetBytes(_config.EncryptionKey));
+            _security = new SecurityUtility(Encoding.UTF8.GetBytes(ApplicationConfig.EncryptionKey));
 
             await _client.StartAsync(options);
             new Thread(new ThreadStart(this.PingLoop)).Start();
@@ -81,7 +78,7 @@ namespace RemoteMedia.Application.Client {
             output = _security.Sign(output);
             output = _security.Encrypt(output);
 
-            var message = new MqttApplicationMessageBuilder().WithTopic(_config.ResponseTopic).WithPayload(output).Build();
+            var message = new MqttApplicationMessageBuilder().WithTopic(ApplicationConfig.MqttResponseTopic).WithPayload(output).Build();
             await _client.EnqueueAsync(message);
 
             _logger.WriteEntry("Message response added to the queue");
@@ -91,16 +88,16 @@ namespace RemoteMedia.Application.Client {
             Stop().Wait();
         }
 
-        private async Task SubscribeTopic(MqttConfig config) {
+        private async Task SubscribeTopic(string topic) {
             var filterBuilder = new MqttTopicFilterBuilder();
-            filterBuilder.WithTopic(config.ListenTopic);
+            filterBuilder.WithTopic(topic);
 
             var filters = new List<MqttTopicFilter> {
                 filterBuilder.Build()
             };
             await _client.SubscribeAsync(filters);
 
-            _logger.WriteEntry($"Listening topic '{config.ListenTopic}'");
+            _logger.WriteEntry($"Listening topic '{topic}'");
         }
 
         private ICommand GetCommand(byte[] input) {
@@ -122,19 +119,19 @@ namespace RemoteMedia.Application.Client {
                 Thread.Sleep(20000);
                 if (!_client.IsConnected) continue;
                 _client.EnqueueAsync(
-                    new MqttApplicationMessageBuilder().WithTopic(_config.PingTopic).WithPayload("ping").Build()
+                    new MqttApplicationMessageBuilder().WithTopic(ApplicationConfig.MqttPingTopic).WithPayload("ping").Build()
                 );
             }
         }
 
-        private static ManagedMqttClientOptions BuildClientOptions(MqttConfig config) {
+        private static ManagedMqttClientOptions BuildClientOptions() {
             var factory = new MqttFactory();
 
             var clientOptions = factory.CreateClientOptionsBuilder();
-            clientOptions.WithTcpServer(config.Host, config.Port);
+            clientOptions.WithTcpServer(ApplicationConfig.MqttHost, ApplicationConfig.MqttPort);
 
-            if (config.HasCredentials) {
-                clientOptions.WithCredentials(config.Username, config.Password);
+            if (ApplicationConfig.MqttHasCredentials) {
+                clientOptions.WithCredentials(ApplicationConfig.MqttUser, ApplicationConfig.MqttPassword);
             }
 
             var optionsBuilder = factory.CreateManagedMqttClientOptionsBuilder();
