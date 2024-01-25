@@ -118,4 +118,7 @@
     </PackageReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <PropertyGroup>
+    <PostBuildEvent>copy /Y "$(SolutionDir)Scripts\Setup.ps1" "$(TargetDir)Setup.ps1"</PostBuildEvent>
+  </PropertyGroup>
 </Project>
